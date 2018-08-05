@@ -20,6 +20,36 @@ EXTENSION_MAPPING = {
 }
 
 
+def main():
+    session = authenticate()
+    (session_user, _) = session.auth
+    parser = argparse.ArgumentParser(
+        description='Find the user github contributions by language',
+    )
+    parser.add_argument('-u', '--user', type=str, nargs='?', default=session_user)
+    user = parser.parse_args().user
+    stats = get_stats(session, user)
+    for language, stat in stats.items():
+        added = stat.added
+        deleted = stat.deleted
+        total = added + deleted
+        net = added - deleted
+        if net > 0:
+            net_color = Fore.GREEN
+        elif net < 0:
+            net_color = Fore.RED
+        else:
+            net_color = Fore.RESET
+        print()
+        print(language)
+        print()
+        print(Fore.GREEN + f'    Added:   {added}')
+        print(Fore.RED + f'    Deleted: {deleted}')
+        print(Fore.RESET + f'    Total:   {total}')
+        print(net_color + f'    Net:     {net}')
+        print(Fore.RESET)
+
+
 def get_stats(session, user):
     stats = {lang: StatTracker() for lang in EXTENSION_MAPPING.values()}
     response = session.get(f'{BASE_URL}/users/{user}/events')
@@ -104,35 +134,9 @@ class EventIterator:
         else:
             raise StopIteration
 
-        response = session.get(next_url)
+        response = self.session.get(next_url)
         self.headers = response.headers
         self.events = response.json()
 
-
-session = authenticate()
-(session_user, _) = session.auth
-parser = argparse.ArgumentParser(
-    description='Find the user github contributions by language',
-)
-parser.add_argument('-u', '--user', type=str, nargs='?', default=session_user)
-user = parser.parse_args().user
-stats = get_stats(session, user)
-for language, stat in stats.items():
-    added = stat.added
-    deleted = stat.deleted
-    total = added + deleted
-    net = added - deleted
-    if net > 0:
-        net_color = Fore.GREEN
-    elif net < 0:
-        net_color = Fore.RED
-    else:
-        net_color = Fore.RESET
-    print()
-    print(language)
-    print()
-    print(Fore.GREEN + f'    Added:   {added}')
-    print(Fore.RED + f'    Deleted: {deleted}')
-    print(Fore.RESET + f'    Total:   {total}')
-    print(net_color + f'    Net:     {net}')
-    print(Fore.RESET)
+if __name__ == '__main__':
+    main()
