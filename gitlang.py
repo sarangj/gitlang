@@ -1,4 +1,4 @@
-from colorama import Fore, Style
+from colorama import Fore
 from getpass import getpass
 import requests
 import requests.utils as request_utils
@@ -113,10 +113,17 @@ for language, stat in stats.items():
     deleted = stat.deleted
     total = added + deleted
     net = added - deleted
+    if net > 0:
+        net_color = Fore.GREEN
+    elif net < 0:
+        net_color = Fore.RED
+    else:
+        net_color = Fore.RESET
     print()
     print(language)
     print()
     print(Fore.GREEN + f'    Added:   {added}')
     print(Fore.RED + f'    Deleted: {deleted}')
-    print(Style.RESET_ALL + f'    Total:   {total}')
-    print(f'    Net:     {net}')
+    print(Fore.RESET + f'    Total:   {total}')
+    print(net_color + f'    Net:     {net}')
+    print(Fore.RESET)
