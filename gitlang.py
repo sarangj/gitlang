@@ -1,6 +1,7 @@
 from colorama import Fore, Style
 from getpass import getpass
 import requests
+import requests.utils as request_utils
 
 BASE_URL = 'https://api.github.com'
 
@@ -91,21 +92,16 @@ class EventIterator:
         return self.__next__()
 
     def refresh(self):
-        links = self.headers.get('Link')
-        if not links:
-            raise StopIteration()
-
-        next_link = None
-        for link in links.split(','):
-            [l, rel] = link.split(';')
-            if rel == 'next':
-                next_link = l
+        links = request_utils.parse_header_links(self.headers.get('Link'))
+        next_url = None
+        for link in links:
+            if link.get('rel') == 'next':
+                next_url = link['url']
                 break
+        else:
+            raise StopIteration
 
-        if not next_link:
-            raise StopIteration()
-
-        response = session.get(next_link)
+        response = session.get(next_url)
         self.headers = response.headers
         self.events = response.json()
 
