@@ -1,3 +1,4 @@
+from colorama import Fore, Style
 import requests
 
 BASE_URL = 'https://api.github.com'
@@ -118,7 +119,7 @@ for language, stat in stats.items():
     print()
     print(language)
     print()
-    print(f'    Added:   {added}')
-    print(f'    Deleted: {deleted}')
-    print(f'    Total:   {total}')
+    print(Fore.GREEN + f'    Added:   {added}')
+    print(Fore.RED + f'    Deleted: {deleted}')
+    print(Style.RESET_ALL + f'    Total:   {total}')
     print(f'    Net:     {net}')
