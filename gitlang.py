@@ -1,3 +1,4 @@
+import argparse
 from colorama import Fore
 from getpass import getpass
 import requests
@@ -19,8 +20,7 @@ EXTENSION_MAPPING = {
 }
 
 
-def get_stats(session, user=None):
-    user = user or session.auth[0]
+def get_stats(session, user):
     stats = {lang: StatTracker() for lang in EXTENSION_MAPPING.values()}
     response = session.get(f'{BASE_URL}/users/{user}/events')
     iterator = EventIterator(session, response)
@@ -92,7 +92,10 @@ class EventIterator:
         return self.__next__()
 
     def refresh(self):
-        links = request_utils.parse_header_links(self.headers.get('Link'))
+        header_links = self.headers.get('link')
+        if not header_links:
+            raise StopIteration
+        links = request_utils.parse_header_links(header_links)
         next_url = None
         for link in links:
             if link.get('rel') == 'next':
@@ -107,7 +110,13 @@ class EventIterator:
 
 
 session = authenticate()
-stats = get_stats(session, 'sarangj')
+(session_user, _) = session.auth
+parser = argparse.ArgumentParser(
+    description='Find the user github contributions by language',
+)
+parser.add_argument('-u', '--user', type=str, nargs='?', default=session_user)
+user = parser.parse_args().user
+stats = get_stats(session, user)
 for language, stat in stats.items():
     added = stat.added
     deleted = stat.deleted
