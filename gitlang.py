@@ -1,4 +1,5 @@
 from colorama import Fore, Style
+from getpass import getpass
 import requests
 
 BASE_URL = 'https://api.github.com'
@@ -41,7 +42,7 @@ def get_stats(session, user=None):
 
 def authenticate():
     user = input('user:')
-    password = input('password:')
+    password = getpass('password:')
     auth_code = input('code (if using 2 fac):')
     session = requests.Session()
     session.auth = (user, password)
