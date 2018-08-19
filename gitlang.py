@@ -11,12 +11,16 @@ EXTENSION_MAPPING = {
     'c':    'C',
     'cpp':  'C++',
     'hs':   'Haskell',
+    'html': 'HTML',
     'java': 'Java',
     'js':   'Javascript',
     'jsx':  'Javascript',
+    'php':  'PHP',
     'py':   'Python',
+    'rb':   'Ruby',
     'rust': 'Rust',
     'sql':  'SQL',
+    'sh':   'Shell',
 }
 
 
