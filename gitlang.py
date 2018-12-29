@@ -10,6 +10,7 @@ BASE_URL = 'https://api.github.com'
 EXTENSION_MAPPING = {
     'c':    'C',
     'cpp':  'C++',
+    'go':   'Go',
     'hs':   'Haskell',
     'html': 'HTML',
     'java': 'Java',
