@@ -1,4 +1,6 @@
+import aiohttp
 import argparse
+import asyncio
 from colorama import Fore
 from getpass import getpass
 import requests
@@ -25,15 +27,17 @@ EXTENSION_MAPPING = {
 }
 
 
-def main():
-    session = authenticate()
-    (session_user, _) = session.auth
+async def main():
+    (session_user, passw, auth_code) = get_creds()
     parser = argparse.ArgumentParser(
         description='Find the user github contributions by language',
     )
     parser.add_argument('-u', '--user', type=str, nargs='?', default=session_user)
     user = parser.parse_args().user
-    stats = get_stats(session, user)
+    auth = aiohttp.BasicAuth(session_user, passw)
+    headers = {'X-GitHub-OTP': auth_code}
+    async with aiohttp.ClientSession(auth=auth, headers=headers) as session:
+        stats = await get_stats(session, user)
     for language, stat in stats.items():
         added = stat.added
         deleted = stat.deleted
@@ -55,36 +59,60 @@ def main():
         print(Fore.RESET)
 
 
-def get_stats(session, user):
+async def get_stats(session, user):
+    async with session.get(f'{BASE_URL}/users/{user}/events') as response:
+        response.raise_for_status()
+        events = await response.json()
+        iterator = EventIterator(session, response.headers, events)
+    event_handles = []
+    async for event in iterator:
+        event_handles.append(handle_event(session, user, event))
+    event_commits = await asyncio.gather(*event_handles)
     stats = {lang: StatTracker() for lang in EXTENSION_MAPPING.values()}
-    response = session.get(f'{BASE_URL}/users/{user}/events')
-    iterator = EventIterator(session, response)
-    for event in iterator:
-        if event['type'] != 'PushEvent' or event['actor']['login'] != user:
-            continue
-        repo = event['repo']['name']
-        for commit in event['payload']['commits']:
-            if commit['author']['name'] != user:
-                continue
-            sha = commit['sha']
-            commit_response = session.get(f'{BASE_URL}/repos/{repo}/commits/{sha}')
-            for file_data in commit_response.json().get('files', []):
-                commit_data = FileCommitData(file_data)
-                language = commit_data.get_language()
-                if language:
-                    stats[language].update(commit_data)
+    for commit_data in flatten(event_commits):
+        language = commit_data.get_language()
+        if language:
+            stats[language].update(commit_data)
     return {l: s for l, s in stats.items() if s.added or s.deleted}
 
 
-def authenticate():
+async def handle_event(session, user, event):
+    if event['type'] != 'PushEvent' or event['actor']['login'] != user:
+        return []
+    repo = event['repo']['name']
+    commit_data_fetches = []
+    for commit in event['payload']['commits']:
+        if commit['author']['name'] != user:
+            continue
+        commit_data_fetches.append(
+            fetch_commit_data(
+                session,
+                repo,
+                commit['sha'],
+            ),
+        )
+    commit_datas = await asyncio.gather(*commit_data_fetches)
+    return flatten(commit_datas)
+
+
+async def fetch_commit_data(session, repo, sha):
+    async with session.get(f'{BASE_URL}/repos/{repo}/commits/{sha}') as response:
+        response_json = await response.json()
+        files = response_json.get('files', [])
+        return [FileCommitData(file_data) for file_data in files]
+
+
+def get_creds():
     user = input('user:')
     password = getpass('password:')
     auth_code = input('code (if using 2 fac):')
-    session = requests.Session()
-    session.auth = (user, password)
-    if auth_code:
-        session.headers.update({'X-GitHub-OTP': auth_code})
-    return session
+    return (user, password, auth_code)
+
+
+def flatten(ls):
+    """Flatten a list of lists"""
+    return [item for l in ls for item in l]
+
 
 
 class StatTracker:
@@ -111,25 +139,24 @@ class FileCommitData:
 
 class EventIterator:
 
-    def __init__(self, session, response):
+    def __init__(self, session, headers, events):
         self.session = session
-        self.headers = response.headers
-        response.raise_for_status()
-        self.events = response.json()
+        self.headers = headers
+        self.events = events
 
-    def __iter__(self):
+    def __aiter__(self):
         return self
 
-    def __next__(self):
+    async def __anext__(self):
         if self.events:
             return self.events.pop(0)
-        self.refresh()
-        return self.__next__()
+        await self.refresh()
+        return await self.__anext__()
 
-    def refresh(self):
+    async def refresh(self):
         header_links = self.headers.get('link')
         if not header_links:
-            raise StopIteration
+            raise StopAsyncIteration
         links = request_utils.parse_header_links(header_links)
         next_url = None
         for link in links:
@@ -137,11 +164,12 @@ class EventIterator:
                 next_url = link['url']
                 break
         else:
-            raise StopIteration
+            raise StopAsyncIteration
 
-        response = self.session.get(next_url)
-        self.headers = response.headers
-        self.events = response.json()
+        async with self.session.get(next_url) as response:
+            self.headers = response.headers
+            self.events = await response.json()
 
 if __name__ == '__main__':
-    main()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
